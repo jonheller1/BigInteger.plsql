@@ -112,12 +112,39 @@ end test_add;
 --------------------------------------------------------------------------------
 procedure test_subtract is
 begin
+	--Static tests with specific numbers.
 	assert_equals('SUBTRACT: NULL 1', null, bigInt(1).subtract(bigInt(cast(null as number))).toString);
 	assert_equals('SUBTRACT: NULL 2', null, bigInt(1).subtract(bigInt(cast(null as varchar2))).toString);
 	assert_equals('SUBTRACT: NULL 3', null, bigInt(cast(null as number)).subtract(bigInt(1)).toString);
 	assert_equals('SUBTRACT: NULL 4', null, bigInt(cast(null as varchar2)).subtract(bigInt(1)).toString);
 
+	assert_equals('SUBTRACT: 0', '0', bigInt(0).subtract(bigInt(0)).toString);
+	assert_equals('SUBTRACT: 2 positives', '1', bigInt(2).subtract(bigInt(1)).toString);
+	assert_equals('SUBTRACT: 2 negatives', '0', bigInt(-1).subtract(bigInt(-1)).toString);
+	assert_equals('SUBTRACT: positive and negative', '-2', bigInt(-1).subtract(bigInt(1)).toString);
+	assert_equals('SUBTRACT: positive and negative 2', '2', bigInt(1).subtract(bigInt(-1)).toString);
+	assert_equals('SUBTRACT: carry over 1', '2', bigInt(11).subtract(bigInt(9)).toString);
+	assert_equals('SUBTRACT: carry over 2', '-1', bigInt(9).subtract(bigInt(10)).toString);
+	assert_equals('SUBTRACT: large', lpad('1', 4000, '1'), bigInt(lpad('2', 4000, '2')).subtract(bigInt(lpad('1', 4000, '1'))).toString);
+	assert_equals('SUBTRACT: large with carry', lpad('9', 3999, '9'), bigInt('1'||lpad('0', 3999, '0')).subtract(bigInt('1')).toString);
 
+	--TODO: Dynamic subtracts
+	--Dynamic tests with random numbers.
+	declare
+		v_random1 integer;
+		v_random2 integer;
+		v_result number;
+		v_bigInt_result bigInt;
+	begin
+		for i in 1 .. 100 loop
+			v_random1 := trunc(dbms_random.value(-999999999999999999999999999999999999, 999999999999999999999999999999999999));
+			v_random2 := trunc(dbms_random.value(-999999999999999999999999999999999999, 999999999999999999999999999999999999));
+			v_result := v_random1 - v_random2;
+			v_bigInt_result := bigInt(v_random1).subtract(bigInt(v_random2));
+
+			assert_equals('SUBTRACT: Random '||i, to_char(v_result, 'FM999999999999999999999999999999999999999999999999999999999999999'), v_bigInt_result.toString);
+		end loop;
+	end;
 end test_subtract;
 
 

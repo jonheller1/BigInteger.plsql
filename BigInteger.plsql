@@ -7,7 +7,6 @@ create or replace type bigInt as object
 	--Special thanks to paxdiablo: https://stackoverflow.com/questions/1218149/arbitrary-precision-arithmetic-explanation
 	--The API is based on BigInteger.js: http://peterolson.github.io/BigInteger.js/
 
-
 	digits digits_type,
 	sign varchar2(1),
 
@@ -23,6 +22,9 @@ create or replace type bigInt as object
 	member function greater(p_number bigInt) return boolean,
 	member function subtract(p_number bigInt) return bigInt,
 	member function toString return clob,
+
+	--Metadata
+	member function getVersion return number,
 
 	--Private functions.
 	--(I would hide these but Oracle types do not allow private functions.)
@@ -304,6 +306,7 @@ end greater;
 --Subtract
 --------------------------------------------------------------------------------
 member function subtract(p_number bigInt) return bigInt is
+	v_temp bigInt;
 	v_difference bigInt := bigInt(0);
 	v_intermediate_difference number;
 	v_carry number := 0;
@@ -319,14 +322,20 @@ begin
 
 	--Convert some subtractions into additions to simplify signs.
 	if self.sign = '+' and p_number.sign = '-' then
-		return self.add_(p_number);
+		v_temp := p_number;
+		v_temp.sign := '+';
+		v_difference := self.add_(v_temp);
+		return v_difference;
 	elsif self.sign = '-' and p_number.sign = '+' then
-		v_difference := self.add_(p_number);
+		v_temp := self;
+		v_temp.sign := '+';
+		v_difference := v_temp.add_(p_number);
 		v_difference.sign := '-';
 		return v_difference;
 	elsif self.sign = '-' and p_number.sign = '-' then
-		v_difference := self.add_(p_number);
-		v_difference.sign := '-';
+		v_temp := p_number;
+		v_temp.sign := '+';
+		v_difference := self.add_(v_temp);
 		return v_difference;
 	end if;
 
@@ -432,7 +441,11 @@ begin
 end toString;
 
 
-
+--------------------------------------------------------------------------------
+member function getVersion return number is
+begin
+	return '0.0.0';
+end getVersion;
 
 
 end;
