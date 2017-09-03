@@ -20,6 +20,8 @@ create or replace type bigInt as object
 	member function abs return bigInt,
 	member function add_(p_number bigInt) return bigInt, --"ADD" is reserved word, use "_" to make it work.
 	member function greater(p_number bigInt) return boolean,
+	member function multiply(p_number bigInt) return bigInt,
+	member function plus(p_number bigInt) return bigInt,
 	member function subtract(p_number bigInt) return bigInt,
 	member function toString return clob,
 
@@ -28,7 +30,8 @@ create or replace type bigInt as object
 
 	--Private functions.
 	--(I would hide these but Oracle types do not allow private functions.)
-	member procedure private_set_from_clob(p_number clob)
+	member procedure private_set_from_clob(p_number clob),
+	member function private_shift_left(p_n integer) return bigInt
 )
 /
 create or replace type body bigInt is
@@ -108,47 +111,6 @@ begin
 
 	return;
 end;
-
-
---------------------------------------------------------------------------------
---Create bigInt out of a string.
---------------------------------------------------------------------------------
-member procedure private_set_from_clob(p_number clob) is
-	v_sign_offset number := 0;
-begin
-	--Special case for null
-	if p_number is null then
-		return;
-	end if;
-
-	--Initialize.
-	self.digits := digits_type();
-
-	--Set the sign.
-	if dbms_lob.substr(p_number, 1, 1) = '-' then
-		self.sign := '-';
-		self.digits.extend(dbms_lob.getlength(p_number) - 1);
-		v_sign_offset := 1;
-	else
-		self.digits.extend(dbms_lob.getlength(p_number));
-	end if;
-
-	--Set the digits.  Raise an exception if a non-digit is found.
-	--TODO: Performance improvement.  Convert CLOB to VARCHAR2 before processing.
-	for i in 1 .. dbms_lob.getlength(p_number) loop
-		if i = 1 and dbms_lob.substr(p_number, 1, 1) = '-' then
-			null;
-		else
-			if dbms_lob.substr(p_number, 1, i) in ('0','1','2','3','4','5','6','7','8','9') then
-				self.digits( (self.digits.count - i + 1) + v_sign_offset) := dbms_lob.substr(p_number, 1, i);
-			else
-				raise_application_error(-20001, 'The input is not an integer.  The character '||
-					dbms_lob.substr(p_number, 1, i)||' was found.');
-			end if;
-		end if;
-	end loop;
-
-end private_set_from_clob;
 
 
 --------------------------------------------------------------------------------
@@ -303,6 +265,65 @@ end greater;
 
 
 --------------------------------------------------------------------------------
+--Multiply
+--------------------------------------------------------------------------------
+member function multiply(p_number bigInt) return bigInt is
+	v_product bigInt := bigInt(0);
+	v_shifted_self bigInt;
+begin
+	--Special case when nulls.
+	if self.digits is null or p_number.digits is null then
+		v_product.digits := null;
+		v_product.sign := null;
+		return v_product;
+	end if;
+
+	--Set and remove sign SELF.
+	v_shifted_self := self.abs;
+
+	--Multply numbers by shifting and adding.
+	for i in 1 .. p_number.digits.count loop
+		if i > 1 then
+			v_shifted_self := v_shifted_self.private_shift_left(1);
+		end if;
+
+		for j in 1 .. p_number.digits(i) loop
+			v_product := v_product.plus(v_shifted_self);
+		end loop;
+	end loop;
+
+	--Set sign.
+	if self.sign = '-' and p_number.sign = '-' then
+		v_product.sign := '+';
+	elsif self.sign = '+' and p_number.sign = '+' then
+		v_product.sign := '+';
+	else
+		v_product.sign := '-';
+	end if;
+
+	--Remove any leading zeroes, except for the first one.
+	for i in reverse 2 .. v_product.digits.count loop
+		if v_product.digits(i) = 0 then
+			v_product.digits.trim(1);
+		else
+			exit;
+		end if;
+	end loop;
+
+	return v_product;
+end multiply;
+
+
+--------------------------------------------------------------------------------
+--Plus
+--------------------------------------------------------------------------------
+member function plus(p_number bigInt) return bigInt is
+begin
+	return self.add_(p_number);
+end plus;
+
+
+--------------------------------------------------------------------------------
 --Subtract
 --------------------------------------------------------------------------------
 member function subtract(p_number bigInt) return bigInt is
@@ -446,6 +467,80 @@ member function getVersion return number is
 begin
 	return '0.0.0';
 end getVersion;
+
+
+--------------------------------------------------------------------------------
+--Create bigInt out of a string.
+--------------------------------------------------------------------------------
+member procedure private_set_from_clob(p_number clob) is
+	v_sign_offset number := 0;
+begin
+	--Special case for null
+	if p_number is null then
+		return;
+	end if;
+
+	--Initialize.
+	self.digits := digits_type();
+
+	--Set the sign.
+	if dbms_lob.substr(p_number, 1, 1) = '-' then
+		self.sign := '-';
+		self.digits.extend(dbms_lob.getlength(p_number) - 1);
+		v_sign_offset := 1;
+	else
+		self.sign := '+';
+		self.digits.extend(dbms_lob.getlength(p_number));
+	end if;
+
+	--Set the digits.  Raise an exception if a non-digit is found.
+	--TODO: Performance improvement.  Convert CLOB to VARCHAR2 before processing.
+	for i in 1 .. dbms_lob.getlength(p_number) loop
+		if i = 1 and dbms_lob.substr(p_number, 1, 1) = '-' then
+			null;
+		else
+			if dbms_lob.substr(p_number, 1, i) in ('0','1','2','3','4','5','6','7','8','9') then
+				self.digits( (self.digits.count - i + 1) + v_sign_offset) := dbms_lob.substr(p_number, 1, i);
+			else
+				raise_application_error(-20001, 'The input is not an integer.  The character '||
+					dbms_lob.substr(p_number, 1, i)||' was found.');
+			end if;
+		end if;
+	end loop;
+
+end private_set_from_clob;
+
+
+--------------------------------------------------------------------------------
+--Add P_N zeros to a number.
+--------------------------------------------------------------------------------
+member function private_shift_left(p_n integer) return bigInt is
+	v_shifted bigInt := self;
+begin
+	--Special case when null.
+	if self.digits is null or p_n is null then
+		return v_shifted;
+	end if;
+
+	--TODO: Deal with negative numbers - negate P_N and call shift_right?
+	--Verify the number.
+
+	--Add space for new digits.
+	v_shifted.digits.extend(p_n);
+
+	--Move digits.
+	for i in reverse p_n + 1 .. v_shifted.digits.count loop
+		v_shifted.digits(i) := v_shifted.digits(i-p_n);
+	end loop;
+
+	--Fill in with zeroes.
+	for i in 1 .. p_n loop
+		v_shifted.digits(i) := 0;
+	end loop;
+
+	--Return the new value.
+	return v_shifted;
+end private_shift_left;
 
 
 end;

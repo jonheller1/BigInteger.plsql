@@ -128,7 +128,6 @@ begin
 	assert_equals('SUBTRACT: large', lpad('1', 4000, '1'), bigInt(lpad('2', 4000, '2')).subtract(bigInt(lpad('1', 4000, '1'))).toString);
 	assert_equals('SUBTRACT: large with carry', lpad('9', 3999, '9'), bigInt('1'||lpad('0', 3999, '0')).subtract(bigInt('1')).toString);
 
-	--TODO: Dynamic subtracts
 	--Dynamic tests with random numbers.
 	declare
 		v_random1 integer;
@@ -146,6 +145,44 @@ begin
 		end loop;
 	end;
 end test_subtract;
+
+
+--------------------------------------------------------------------------------
+procedure test_multiply is
+begin
+	--Static tests with specific numbers.
+	assert_equals('MULTIPLY: NULL 1', null, bigInt(1).multiply(bigInt(cast(null as number))).toString);
+	assert_equals('MULTIPLY: NULL 2', null, bigInt(1).multiply(bigInt(cast(null as varchar2))).toString);
+	assert_equals('MULTIPLY: NULL 3', null, bigInt(cast(null as number)).multiply(bigInt(1)).toString);
+	assert_equals('MULTIPLY: NULL 4', null, bigInt(cast(null as varchar2)).multiply(bigInt(1)).toString);
+
+	assert_equals('MULTIPLY: 0 1', '0', bigInt(0).multiply(bigInt(0)).toString);
+	assert_equals('MULTIPLY: 0 2', '0', bigInt(0).multiply(bigInt(999999999999999)).toString);
+	assert_equals('MULTIPLY: 2 positives', '4', bigInt(2).multiply(bigInt(2)).toString);
+	assert_equals('MULTIPLY: 2 negatives', '4', bigInt(-2).multiply(bigInt(-2)).toString);
+	assert_equals('MULTIPLY: positive and negative', '-1', bigInt(-1).multiply(bigInt(1)).toString);
+	assert_equals('MULTIPLY: positive and negative 2', '-1', bigInt(1).multiply(bigInt(-1)).toString);
+	assert_equals('MULTIPLY: uneven digit lengths 1', '1000', bigInt(10).multiply(bigInt(100)).toString);
+	assert_equals('MULTIPLY: uneven digit lengths 2', '1000', bigInt(100).multiply(bigInt(10)).toString);
+	assert_equals('MULTIPLY: large', lpad('4', 4000, '1'), bigInt(lpad('2', 4000, '2')).multiply(bigInt(2)).toString);
+
+	--Dynamic tests with random numbers.
+	declare
+		v_random1 integer;
+		v_random2 integer;
+		v_result number;
+		v_bigInt_result bigInt;
+	begin
+		for i in 1 .. 100 loop
+			v_random1 := trunc(dbms_random.value(-9999999999999999, 999999999999999999));
+			v_random2 := trunc(dbms_random.value(-9999999999999999, 999999999999999999));
+			v_result := v_random1 * v_random2;
+			v_bigInt_result := bigInt(v_random1).multiply(bigInt(v_random2));
+
+			assert_equals('SUBTRACT: Random '||i, to_char(v_result, 'FM999999999999999999999999999999999999999999999999999999999999999'), v_bigInt_result.toString);
+		end loop;
+	end;
+end test_multiply;
 
 
 --------------------------------------------------------------------------------
@@ -168,6 +205,7 @@ begin
 	test_constructors;
 	test_add;
 	test_subtract;
+	test_multiply;
 
 	for i in 1 .. g_report.count loop
 		dbms_output.put_line(g_report(i));
